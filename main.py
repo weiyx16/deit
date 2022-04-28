@@ -24,11 +24,21 @@ from samplers import RASampler
 import models
 import utils
 
+from cache_image_folder import SubsetRandomSampler
+import torch.distributed as dist
+import wandb
+
+def wandb_log(no_wandb=False, *args, **kwargs):
+    if dist.get_rank() == 0 and not no_wandb:
+        wandb.log(*args, **kwargs)
+
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--epochs', default=300, type=int)
+    parser.add_argument('--tag', default='deit_base_patch16_224_valuereg', type=str,
+                        help='job-tag')
 
     # Model parameters
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
@@ -138,7 +148,7 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
+    parser.add_argument('--data-set', default='IMNET_ZIP', choices=['CIFAR', 'IMNET', 'IMNET_ZIP', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
@@ -165,11 +175,25 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--no-wandb', action='store_true')
+
     return parser
 
 
 def main(args):
     utils.init_distributed_mode(args)
+    if dist.get_rank():
+        # setup wandb
+        if not args.no_wandb:
+            wandb.login(key='c26712d8885e3e6742ffd9c311e10870a46a197f')
+            run = wandb.init(
+                id=args.tag,
+                name=args.tag,
+                entity='msravcg',
+                project='simmim_cond',
+                job_type='pretrain',
+                config=args,
+            )
 
     print(args)
 
@@ -189,7 +213,7 @@ def main(args):
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
-    if True:  # args.distributed:
+    if 'ZIP' not in args.data_set:  # args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
         if args.repeated_aug:
@@ -210,8 +234,12 @@ def main(args):
         else:
             sampler_val = torch.utils.data.SequentialSampler(dataset_val)
     else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        # sampler_train = torch.utils.data.RandomSampler(dataset_train)
+        # sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        indices = np.arange(dist.get_rank(), len(dataset_train), dist.get_world_size())
+        sampler_train = SubsetRandomSampler(indices)
+        indices = np.arange(dist.get_rank(), len(dataset_val), dist.get_world_size())
+        sampler_val = SubsetRandomSampler(indices)
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -376,6 +404,7 @@ def main(args):
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
+            no_wandb=args.no_wandb,
             set_training_mode=args.finetune == ''  # keep in eval mode during finetuning
         )
 
@@ -396,7 +425,7 @@ def main(args):
 
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-        
+
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
             if args.output_dir:
@@ -419,7 +448,11 @@ def main(args):
                      'epoch': epoch,
                      'n_parameters': n_parameters}
         
-        
+        wandb_log(
+            no_wandb=args.no_wandb,
+            data=dict(acc1=test_stats["acc1"], acc5=test_stats["acc5"], val_loss=test_stats["loss"], max_acc=max_accuracy),
+            step=(epoch + 1) * len(data_loader_train),
+        )
         
         
         if args.output_dir and utils.is_main_process():
@@ -436,4 +469,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    if args.no_wandb:
+        print(" warning you're not using wandb ! ")
     main(args)

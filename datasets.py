@@ -8,6 +8,7 @@ from torchvision.datasets.folder import ImageFolder, default_loader
 
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
+from cache_image_folder import CachedImageFolder
 
 
 class INatDataset(ImageFolder):
@@ -62,6 +63,14 @@ def build_dataset(is_train, args):
     elif args.data_set == 'IMNET':
         root = os.path.join(args.data_path, 'train' if is_train else 'val')
         dataset = datasets.ImageFolder(root, transform=transform)
+        nb_classes = 1000
+    elif args.data_set == 'IMNET_ZIP':
+        prefix = 'train'
+        cache_mode = 'part'
+        ann_file = prefix + "_map.txt"
+        prefix = prefix + ".zip@/"
+        dataset = CachedImageFolder(args.data_path, ann_file, prefix, transform,
+                                    cache_mode='part')
         nb_classes = 1000
     elif args.data_set == 'INAT':
         dataset = INatDataset(args.data_path, train=is_train, year=2018,

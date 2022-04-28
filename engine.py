@@ -15,18 +15,25 @@ from timm.utils import accuracy, ModelEma
 from losses import DistillationLoss
 import utils
 
+import wandb
+import torch.distributed as dist
+
+def wandb_log(no_wandb=False, *args, **kwargs):
+    if dist.get_rank() == 0 and not no_wandb:
+        wandb.log(*args, **kwargs)
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
-                    set_training_mode=True):
+                    set_training_mode=True, no_wandb=False):
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
+    idx = 0
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -54,6 +61,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         torch.cuda.synchronize()
         if model_ema is not None:
             model_ema.update(model)
+
+        idx += 1
+        if idx % print_freq == 0:
+            log_message = dict(lr=optimizer.param_groups[0]["lr"], epoch=epoch, iter=idx, loss=loss_value)
+            wandb_log(
+                no_wandb=no_wandb,
+                data=log_message,
+                step=epoch * len(data_loader) + idx,
+            )
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
