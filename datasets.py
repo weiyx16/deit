@@ -65,7 +65,7 @@ def build_dataset(is_train, args):
         dataset = datasets.ImageFolder(root, transform=transform)
         nb_classes = 1000
     elif args.data_set == 'IMNET_ZIP':
-        prefix = 'train'
+        prefix = 'train' if is_train else 'val'
         cache_mode = 'part'
         ann_file = prefix + "_map.txt"
         prefix = prefix + ".zip@/"
