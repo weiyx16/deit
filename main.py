@@ -27,6 +27,7 @@ import utils
 from cache_image_folder import SubsetRandomSampler
 import torch.distributed as dist
 import wandb
+import math
 
 def wandb_log(no_wandb=False, *args, **kwargs):
     if dist.get_rank() == 0 and not no_wandb:
@@ -181,12 +182,21 @@ def get_args_parser():
     ### regularization new:
     parser.add_argument('--reg-loss-weight', type=float, default=0.0,
                         help='regularization loss weight')
+    parser.add_argument('--reg-loss-schedule', type=str, default='none',
+                        help='regularization loss weight scheduling')
     parser.add_argument('--value-reg', action='store_true')
     parser.add_argument('--output-reg', action='store_true')
     parser.add_argument('--attn-reg', action='store_true')
 
     return parser
 
+def reg_loss_schedule(method, epoch, total_epochs, loss_weight):
+    if method == 'none':
+        return loss_weight
+    elif method == 'linear':
+        return max(1e-4, epoch / total_epochs*loss_weight)
+    elif method == 'cosine':
+        return max(1e-4, 0.5 * (1 - math.cos(math.pi * epoch / total_epochs)) * loss_weight)
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -423,7 +433,7 @@ def main(args):
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             no_wandb=args.no_wandb,
-            reg_loss_weight=args.reg_loss_weight,
+            reg_loss_weight=reg_loss_schedule(args.reg_loss_schedule, epoch, args.epochs, args.reg_loss_weight),
             set_training_mode=args.finetune == ''  # keep in eval mode during finetuning
         )
 
