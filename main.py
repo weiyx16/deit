@@ -177,6 +177,14 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--no-wandb', action='store_true')
 
+
+    ### regularization new:
+    parser.add_argument('--reg-loss-weight', type=float, default=0.0,
+                        help='regularization loss weight')
+    parser.add_argument('--value-reg', action='store_true')
+    parser.add_argument('--output-reg', action='store_true')
+    parser.add_argument('--attn-reg', action='store_true')
+
     return parser
 
 
@@ -273,6 +281,9 @@ def main(args):
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
         drop_block_rate=None,
+        value_reg=args.value_reg,
+        output_reg=args.output_reg,
+        attn_reg=args.attn_reg
     )
 
     if args.finetune:
@@ -405,6 +416,7 @@ def main(args):
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             no_wandb=args.no_wandb,
+            reg_loss_weight=args.reg_loss_weight,
             set_training_mode=args.finetune == ''  # keep in eval mode during finetuning
         )
 

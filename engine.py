@@ -26,7 +26,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
-                    set_training_mode=True, no_wandb=False):
+                    set_training_mode=True, no_wandb=False, reg_loss_weight=0.0):
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -42,9 +42,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             samples, targets = mixup_fn(samples, targets)
 
         with torch.cuda.amp.autocast():
-            outputs = model(samples)
+            outputs, reg_cos = model(samples)
             loss = criterion(samples, outputs, targets)
-
+            if reg_loss_weight > 0.0:
+                loss += reg_loss_weight * reg_cos
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
@@ -65,6 +66,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         idx += 1
         if idx % print_freq == 0:
             log_message = dict(lr=optimizer.param_groups[0]["lr"], epoch=epoch, iter=idx, loss=loss_value)
+            if reg_loss_weight > 0.0:
+                log_message['reg_loss'] = reg_cos
             wandb_log(
                 no_wandb=no_wandb,
                 data=log_message,
