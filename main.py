@@ -190,7 +190,7 @@ def get_args_parser():
 
 def main(args):
     utils.init_distributed_mode(args)
-    if dist.get_rank():
+    if dist.get_rank() == 0:
         # setup wandb
         if not args.no_wandb:
             wandb.login(key='c26712d8885e3e6742ffd9c311e10870a46a197f')
