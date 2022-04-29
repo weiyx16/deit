@@ -184,7 +184,10 @@ class VisionTransformer(nn.Module):
     def forward(self, x):
         x, reg_cos = self.forward_features(x)
         x = self.head(x)
-        return x, reg_cos
+        if self.training:
+            return x, reg_cos
+        else:
+            return x
 
 
 class DistilledVisionTransformer(VisionTransformer):

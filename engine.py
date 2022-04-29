@@ -42,7 +42,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             samples, targets = mixup_fn(samples, targets)
 
         with torch.cuda.amp.autocast():
-            outputs, reg_cos = model(samples)
+            if criterion.distillation_type != 'none':
+                outputs = model(samples)
+            else:
+                outputs, reg_cos = model(samples)
             loss = criterion(samples, outputs, targets)
             if reg_loss_weight > 0.0:
                 loss += reg_loss_weight * reg_cos
@@ -98,7 +101,7 @@ def evaluate(data_loader, model, device):
 
         # compute output
         with torch.cuda.amp.autocast():
-            output, _ = model(images)
+            output = model(images)
             loss = criterion(output, target)
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))

@@ -361,12 +361,19 @@ def main(args):
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
         print(f"Creating teacher model: {args.teacher_model}")
-        teacher_model = create_model(
-            args.teacher_model,
-            pretrained=False,
-            num_classes=args.nb_classes,
-            global_pool='avg',
-        )
+        if 'deit' in args.teacher_model:
+            teacher_model = create_model(
+                args.teacher_model,
+                pretrained=False,
+                num_classes=args.nb_classes,
+            )
+        else:
+            teacher_model = create_model(
+                args.teacher_model,
+                pretrained=False,
+                num_classes=args.nb_classes,
+                global_pool='avg',
+            )
         if args.teacher_path.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
                 args.teacher_path, map_location='cpu', check_hash=True)
