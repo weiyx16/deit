@@ -49,9 +49,10 @@ class Attention(nn.Module):
         x = (attn @ v).transpose(1, 2)
         if self.value_reg:
             B, L, H, D = v.shape
-            # v_norm = v / (1e-8 + v.norm(dim=-1, keepdim=True))
-            v_norm = v.reshape(B*L, H, D)
-            reg_cos = torch.bmm(v_norm, v_norm.permute(0, 2, 1)).mean() 
+            v_norm = v / (1e-8 + v.norm(dim=-1, keepdim=True))
+            v_norm = v_norm.reshape(B*L, H, D)
+            reg_cos = torch.bmm(v_norm, v_norm.permute(0, 2, 1))
+            reg_cos = reg_cos.view(B*L, H*H)[:, 1:].view(B*L, H-1, H+1)[:,:,:-1].mean()
         elif self.output_reg:
             B, L, H, D = x.shape
             # x_norm = x / (1e-8 + x.norm(dim=-1, keepdim=True))
