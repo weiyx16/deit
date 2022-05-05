@@ -187,6 +187,7 @@ def get_args_parser():
     parser.add_argument('--value-reg', action='store_true')
     parser.add_argument('--output-reg', action='store_true')
     parser.add_argument('--attn-reg', action='store_true')
+    parser.add_argument('--cosine-head', action='store_true')
 
     return parser
 
@@ -293,7 +294,8 @@ def main(args):
         drop_block_rate=None,
         value_reg=args.value_reg,
         output_reg=args.output_reg,
-        attn_reg=args.attn_reg
+        attn_reg=args.attn_reg,
+        cosine_head=args.cosine_head,
     )
 
     if args.finetune:

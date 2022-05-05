@@ -2,6 +2,7 @@
 # All rights reserved.
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from functools import partial
 
 from timm.models.vision_transformer import VisionTransformer, _cfg
@@ -105,7 +106,7 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm,
-                 output_reg=False, attn_reg=False, value_reg=False):
+                 output_reg=False, attn_reg=False, value_reg=False, cosine_head=False):
         super().__init__()
         self.reg = output_reg or value_reg or attn_reg
         self.num_classes = num_classes
@@ -137,7 +138,17 @@ class VisionTransformer(nn.Module):
         #self.repr_act = nn.Tanh()
 
         # Classifier head
-        self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+        self.cosine_head = cosine_head
+        if cosine_head:
+            if num_classes > 0:
+                self.head = nn.Linear(self.num_features, 256)
+                self.contrast_temperature = 0.05
+                self.sim_matrix = nn.Parameter(torch.randn(size=(self.num_classes, 256)), requires_grad=True)
+                nn.init.normal_(self.sim_matrix, 0, 0.01)
+            else:
+                self.head = nn.Identity()
+        else:
+            self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
         trunc_normal_(self.pos_embed, std=.02)
         trunc_normal_(self.cls_token, std=.02)
@@ -184,7 +195,13 @@ class VisionTransformer(nn.Module):
 
     def forward(self, x):
         x, reg_cos = self.forward_features(x)
-        x = self.head(x)
+        if self.cosine_head:
+            x = self.head(x)
+            x = F.normalize(x, dim=1)
+            sim_matrix = F.normalize(self.sim_matrix, dim=1)
+            x = torch.einsum('nc,kc->nk', [x, sim_matrix]) / self.contrast_temperature
+        else:
+            x = self.head(x)
         if self.training:
             return x, reg_cos
         else:
