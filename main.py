@@ -188,6 +188,7 @@ def get_args_parser():
     parser.add_argument('--output-reg', action='store_true')
     parser.add_argument('--attn-reg', action='store_true')
     parser.add_argument('--cosine-head', action='store_true')
+    parser.add_argument('--avg-pool', action='store_true')
 
     return parser
 
@@ -296,6 +297,7 @@ def main(args):
         output_reg=args.output_reg,
         attn_reg=args.attn_reg,
         cosine_head=args.cosine_head,
+        avg_pool=args.avg_pool,
     )
 
     if args.finetune:

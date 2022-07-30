@@ -106,7 +106,7 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm,
-                 output_reg=False, attn_reg=False, value_reg=False, cosine_head=False):
+                 output_reg=False, attn_reg=False, value_reg=False, cosine_head=False, avg_pool=False):
         super().__init__()
         self.reg = output_reg or value_reg or attn_reg
         self.num_classes = num_classes
@@ -152,6 +152,8 @@ class VisionTransformer(nn.Module):
 
         trunc_normal_(self.pos_embed, std=.02)
         trunc_normal_(self.cls_token, std=.02)
+
+        self.avg_pool = avg_pool
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -190,8 +192,13 @@ class VisionTransformer(nn.Module):
                 x, reg_cos = x
                 all_reg_cos += reg_cos
 
-        x = self.norm(x)
-        return x[:, 0], all_reg_cos
+        if self.avg_pool:
+            # x = x[:, 1:, :].mean(1)
+            x = x.mean(1)
+            return self.norm(x), all_reg_cos
+        else:
+            x = self.norm(x)
+            return x[:, 0], all_reg_cos
 
     def forward(self, x):
         x, reg_cos = self.forward_features(x)
