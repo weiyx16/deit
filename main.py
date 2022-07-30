@@ -189,6 +189,7 @@ def get_args_parser():
     parser.add_argument('--attn-reg', action='store_true')
     parser.add_argument('--cosine-head', action='store_true')
     parser.add_argument('--avg-pool', action='store_true')
+    parser.add_argument("--local_rank", type=int, required=True, help='local rank for DistributedDataParallel')
 
     return parser
 
